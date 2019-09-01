@@ -58,6 +58,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.FALSE, p.parseBoolean)
 	p.registerPrefix(token.LPAREN, p.parseGroupedExpression)
 	p.registerPrefix(token.IF, p.parseIfExpression)
+	p.registerPrefix(token.FUNCTION, p.parseFunctionLiteral)
 
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -298,6 +299,77 @@ func (p *Parser) parseBlockStatement() *ast.BlockStatement {
 	}
 
 	return block
+}
+
+/*
+関数リテラルを解析
+*/
+func (p *Parser) parseFunctionLiteral() ast.Expression {
+	// 関数リテラルノードを生成
+	lit := &ast.FunctionLiteral{Token: p.curToken}
+
+	// 次のトークンが左丸カッコでなかったら何も返さない(構文解析エラー)
+	if !p.expectPeek(token.LPAREN) {
+		return nil
+	} // トークンを一つ進める。左丸カッコがカレントになる。
+
+	// パラメータを解析＆関数リテラルノードのパラメータリストにセット
+	lit.Parameters = p.parseFunctionParameters()
+
+	// 次のトークンが左中カッコかどうかチェック。左中カッコでない場合、関数本体のブロック文が不正なので何も返さない(構文解析エラー)
+	if !p.expectPeek(token.LBRACE) {
+		return nil
+	} // トークンを一つ進める。左中カッコがカレントになる。
+
+	// 関数本体(ブロック文)を解析＆関数リテラルノードの本体にセット
+	lit.Body = p.parseBlockStatement()
+
+	// 生成した関数リテラルノードを返す。これにはパラメータリストと本体が含まれている。
+	return lit
+}
+
+/*
+関数パラメータを解析
+*/
+func (p *Parser) parseFunctionParameters() []*ast.Identifier {
+	// パラメータリストを定義
+	identifiers := []*ast.Identifier{}
+
+	// 次のトークンが右丸カッコかどうかチェック。右丸カッコでない場合、パラメータ無しとわかる。
+	if p.peekTokenIs(token.RPAREN) {
+		// トークンを一つ進める。右丸カッコがカレントになる。
+		p.nextToken()
+		// 空のパラメータリストを返す
+		return identifiers
+	}
+
+	// トークンを一つ進める。一つ目のパラメータがカレントになる。
+	p.nextToken()
+
+	// 一つ目のパラメータのノード(識別子)を生成
+	ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+	// 一つ目のパラメータをパラメータリストに追加
+	identifiers = append(identifiers, ident)
+
+	// 次のトークンがカンマである間ループさせる
+	for p.peekTokenIs(token.COMMA) {
+		// トークンを一つ進める。カンマがカレントになる。
+		p.nextToken()
+		// トークンを一つ進める。次のパラメータがカレントになる。
+		p.nextToken()
+		// 次のパラメータのノード(識別子)を生成
+		ident := &ast.Identifier{Token: p.curToken, Value: p.curToken.Literal}
+		// 次のパラメータをパラメータリストに追加
+		identifiers = append(identifiers, ident)
+	}
+
+	// 全てのパラメータを解析した後、次のトークンが右丸カッコでなかったら何も返さない(構文解析エラー)
+	if !p.expectPeek(token.RPAREN) {
+		return nil
+	}
+
+	// パラメータリストを返す
+	return identifiers
 }
 
 func (p *Parser) curTokenIs(t token.TokenType) bool {
