@@ -30,6 +30,12 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	case *ast.Boolean:
 		return nativeBoolToBooleanObject(node.Value)
 
+	// 関数リテラル
+	case *ast.FunctionLiteral:
+		params := node.Parameters
+		body := node.Body
+		return &object.Function{Parameters: params, Env: env, Body: body}
+
 	// 前置式
 	case *ast.PrefixExpression:
 		right := Eval(node.Right, env)
@@ -58,6 +64,19 @@ func Eval(node ast.Node, env *object.Environment) object.Object {
 	// if式
 	case *ast.IfExpression:
 		return evalIfExpression(node, env)
+
+	// 呼び出し式
+	case *ast.CallExpression:
+		function := Eval(node.Function, env)
+		if isError(function) {
+			return function
+		}
+		args := evalExpressions(node.Arguments, env)
+		if len(args) == 1 && isError(args[0]) {
+			return args[0]
+		}
+
+		return applyFunction(function, args)
 
 	// return文
 	case *ast.ReturnStatement:
@@ -278,6 +297,26 @@ func evalIdentifier(
 	return val
 }
 
+/*
+式リストを全て評価
+*/
+func evalExpressions(
+	exps []ast.Expression,
+	env *object.Environment,
+) []object.Object {
+	var result []object.Object
+
+	for _, e := range exps {
+		evaluated := Eval(e, env)
+		if isError(evaluated) {
+			return []object.Object{evaluated}
+		}
+		result = append(result, evaluated)
+	}
+
+	return result
+}
+
 func isTruthy(obj object.Object) bool {
 	switch obj {
 	case NULL:
@@ -303,4 +342,49 @@ func isError(obj object.Object) bool {
 
 func newError(format string, a ...interface{}) *object.Error {
 	return &object.Error{Message: fmt.Sprintf(format, a...)}
+}
+
+/*
+関数を適用する
+*/
+func applyFunction(fn object.Object, args []object.Object) object.Object {
+	function, ok := fn.(*object.Function)
+	if !ok {
+		return newError("not a function: %s", fn.Type())
+	}
+
+	// 関数が保持する環境で包まれた環境(拡張環境)を取得
+	extendedEnv := extendFunctionEnv(function, args)
+	// 関数本体を拡張環境で評価
+	evaluated := Eval(function.Body, extendedEnv)
+	return unwrapReturnValue(evaluated)
+}
+
+/*
+関数環境を拡張する
+*/
+func extendFunctionEnv(
+	fn *object.Function,
+	args []object.Object,
+) *object.Environment {
+	// 関数が保持する環境で包まれた新しい環境を生成
+	env := object.NewEnclosedEnvironment(fn.Env)
+
+	// 関数パラメータを環境にセット
+	for paramIdx, param := range fn.Parameters {
+		env.Set(param.Value, args[paramIdx])
+	}
+
+	return env
+}
+
+/*
+戻り値を開封
+*/
+func unwrapReturnValue(obj object.Object) object.Object {
+	if returnValue, ok := obj.(*object.ReturnValue); ok {
+		return returnValue.Value
+	}
+
+	return obj
 }
