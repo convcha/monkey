@@ -13,9 +13,9 @@ var (
 
 func Eval(node ast.Node) object.Object {
 	switch node := node.(type) {
-	// 文
+	// プログラム
 	case *ast.Program:
-		return evalStatements(node.Statements)
+		return evalProgram(node)
 
 	// 式
 	case *ast.ExpressionStatement:
@@ -42,21 +42,53 @@ func Eval(node ast.Node) object.Object {
 
 	// ブロック文
 	case *ast.BlockStatement:
-		return evalStatements(node.Statements)
+		return evalBlockStatement(node)
 
 	// if式
 	case *ast.IfExpression:
 		return evalIfExpression(node)
+
+	// return文
+	case *ast.ReturnStatement:
+		val := Eval(node.ReturnValue)
+		return &object.ReturnValue{Value: val}
 	}
 
 	return nil
 }
 
+/*
+プログラムを評価
+*/
+func evalProgram(program *ast.Program) object.Object {
+	var result object.Object
+
+	for _, statement := range program.Statements {
+		result = Eval(statement)
+
+		if returnValue, ok := result.(*object.ReturnValue); ok {
+			return returnValue.Value
+		}
+	}
+
+	return result
+}
+
+/*
+文を評価
+*/
 func evalStatements(stmts []ast.Statement) object.Object {
 	var result object.Object
 
 	for _, statement := range stmts {
+		// 文を評価
 		result = Eval(statement)
+
+		// 文の評価結果が戻り値かどうか確認
+		if returnValue, ok := result.(*object.ReturnValue); ok {
+			// 戻り値の場合は以降の文の評価を打ち切り戻り値の値を返す
+			return returnValue.Value
+		}
 	}
 
 	return result
@@ -170,6 +202,27 @@ func evalIfExpression(ie *ast.IfExpression) object.Object {
 	} else {
 		return NULL
 	}
+}
+
+/*
+ブロック文を評価
+*/
+func evalBlockStatement(block *ast.BlockStatement) object.Object {
+	var result object.Object
+
+	// ノードに含まれている全ての文を評価
+	for _, statement := range block.Statements {
+		// 文を評価して結果を取得
+		result = Eval(statement)
+
+		// 文の結果がNULLでない＆戻り値オブジェクトの場合、以降の文の評価を打ち切り戻り値オブジェクトを返す
+		// 戻り値の値ではなく、オブジェクトを返すことで、外側のブロック文でも評価を打ち切ってくれるようになる
+		if result != nil && result.Type() == object.RETURN_VALUE_OBJ {
+			return result
+		}
+	}
+
+	return result
 }
 
 func isTruthy(obj object.Object) bool {
