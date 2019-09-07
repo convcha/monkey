@@ -73,6 +73,9 @@ func (l *Lexer) NextToken() token.Token {
 		tok = newToken(token.LBRACE, l.ch)
 	case '}':
 		tok = newToken(token.RBRACE, l.ch)
+	case '"':
+		tok.Type = token.STRING
+		tok.Literal = l.readString()
 	case 0:
 		tok.Literal = ""
 		tok.Type = token.EOF
@@ -134,4 +137,21 @@ func (l *Lexer) peekChar() byte {
 	} else {
 		return l.input[l.readPosition]
 	}
+}
+
+/*
+文字列を読み込む
+*/
+func (l *Lexer) readString() string {
+	// 一文字目の位置を保存
+	position := l.position + 1
+	// 閉じ二重引用符 or EOFになるまで文字を読み進める
+	for {
+		l.readChar()
+		if l.ch == '"' || l.ch == 0 {
+			break
+		}
+	}
+	// 文字列を返す
+	return l.input[position:l.position]
 }
