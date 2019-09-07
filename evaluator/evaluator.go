@@ -192,7 +192,9 @@ func evalInfixExpression(
 	case left.Type() == object.INTEGER_OBJ && right.Type() == object.INTEGER_OBJ:
 		// 整数同士を評価して結果を返す
 		return evalIntegerInfixExpression(operator, left, right)
-	//
+	// 左辺、右辺共に文字列の場合
+	case left.Type() == object.STRING_OBJ && right.Type() == object.STRING_OBJ:
+		return evalStringInfixExpression(operator, left, right)
 	case operator == "==":
 		return nativeBoolToBooleanObject(left == right)
 	case operator == "!=":
@@ -237,6 +239,23 @@ func evalIntegerInfixExpression(
 	default:
 		return newError("unknown operator: %s %s %s", left.Type(), operator, right.Type())
 	}
+}
+
+/*
+文字列同士の中置式を評価
+*/
+func evalStringInfixExpression(
+	operator string,
+	left, right object.Object,
+) object.Object {
+	if operator != "+" {
+		return newError("unknown operator: %s %s %s",
+			left.Type(), operator, right.Type())
+	}
+
+	leftVal := left.(*object.String).Value
+	rightVal := right.(*object.String).Value
+	return &object.String{Value: leftVal + rightVal}
 }
 
 func nativeBoolToBooleanObject(input bool) *object.Boolean {
