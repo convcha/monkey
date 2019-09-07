@@ -61,6 +61,7 @@ func New(l *lexer.Lexer) *Parser {
 	p.registerPrefix(token.IF, p.parseIfExpression)
 	p.registerPrefix(token.FUNCTION, p.parseFunctionLiteral)
 	p.registerPrefix(token.STRING, p.parseStringLiteral)
+	p.registerPrefix(token.LBRACKET, p.parseArrayLiteral)
 
 	p.infixParseFns = make(map[token.TokenType]infixParseFn)
 	p.registerInfix(token.PLUS, p.parseInfixExpression)
@@ -242,6 +243,17 @@ func (p *Parser) parsePrefixExpression() ast.Expression {
 	return expression
 }
 
+/*
+配列リテラルを解析
+*/
+func (p *Parser) parseArrayLiteral() ast.Expression {
+	array := &ast.ArrayLiteral{Token: p.curToken}
+
+	array.Elements = p.parseExpressionList(token.RBRACKET)
+
+	return array
+}
+
 // 中置式を解析
 func (p *Parser) parseInfixExpression(left ast.Expression) ast.Expression {
 	defer untrace(trace("parseInfixExpression"))
@@ -318,48 +330,9 @@ func (p *Parser) parseCallExpression(function ast.Expression) ast.Expression {
 	// 呼び出し式ノードを生成
 	exp := &ast.CallExpression{Token: p.curToken, Function: function}
 	// 引数を解析＆解析結果を呼び出し式ノードの引数リストにセット
-	exp.Arguments = p.parseCallArguments()
+	exp.Arguments = p.parseExpressionList(token.RPAREN)
 	// 生成した呼び出し式ノードを返す
 	return exp
-}
-
-/*
-呼び出し式の引数を解析
-*/
-func (p *Parser) parseCallArguments() []ast.Expression {
-	// 引数リスト(式ノードの配列)を定義
-	args := []ast.Expression{}
-
-	// 次のトークンが右丸カッコかどうかチェック。右丸カッコでない場合、パラメータ無しとわかる。
-	if p.peekTokenIs(token.RPAREN) {
-		// トークンを一つ進める。右丸カッコがカレントになる。
-		p.nextToken()
-		// 空の引数リストを返す
-		return args
-	}
-
-	// トークンを一つ進める。一つ目の引数(式)がカレントになる。
-	p.nextToken()
-	// 一つ目の引数(式)を解析＆解析結果(式ノード)を引数リストに追加。
-	args = append(args, p.parseExpression(LOWEST))
-
-	// 次のトークンがカンマである間ループさせる
-	for p.peekTokenIs(token.COMMA) {
-		// トークンを一つ進める。カンマがカレントになる。
-		p.nextToken()
-		// トークンを一つ進める。次の引数(式)がカレントになる。
-		p.nextToken()
-		// 次の引数(式)を解析＆解析結果(式ノード)を引数リストに追加。
-		args = append(args, p.parseExpression(LOWEST))
-	}
-
-	// 全ての引数を解析した後、次のトークンが右丸カッコでなかったら何も返さない(構文解析エラー)
-	if !p.expectPeek(token.RPAREN) {
-		return nil
-	}
-
-	// 生成した引数リスト(式ノードの配列)を返す
-	return args
 }
 
 /*
@@ -507,4 +480,31 @@ func (p *Parser) curPrecedence() int {
 	}
 
 	return LOWEST
+}
+
+/*
+式リストを解析
+*/
+func (p *Parser) parseExpressionList(end token.TokenType) []ast.Expression {
+	list := []ast.Expression{}
+
+	if p.peekTokenIs(end) {
+		p.nextToken()
+		return list
+	}
+
+	p.nextToken()
+	list = append(list, p.parseExpression(LOWEST))
+
+	for p.peekTokenIs(token.COMMA) {
+		p.nextToken()
+		p.nextToken()
+		list = append(list, p.parseExpression(LOWEST))
+	}
+
+	if !p.expectPeek(end) {
+		return nil
+	}
+
+	return list
 }
