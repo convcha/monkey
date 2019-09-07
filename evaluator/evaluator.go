@@ -310,14 +310,17 @@ func evalIdentifier(
 	env *object.Environment,
 ) object.Object {
 	// 環境から識別子を取得
-	val, ok := env.Get(node.Value)
-	if !ok {
-		// 識別子が見つからなかった場合はエラーオブジェクトを返す
-		return newError("identifier not found: " + node.Value)
+	if val, ok := env.Get(node.Value); ok {
+		return val
 	}
 
-	// 識別子が見つかった場合はそれを返す
-	return val
+	// 組み込み関数を探す
+	if builtin, ok := builtins[node.Value]; ok {
+		return builtin
+	}
+
+	// 何も見つからなかった場合はエラーオブジェクトを返す
+	return newError("identifier not found: " + node.Value)
 }
 
 /*
@@ -371,16 +374,21 @@ func newError(format string, a ...interface{}) *object.Error {
 関数を適用する
 */
 func applyFunction(fn object.Object, args []object.Object) object.Object {
-	function, ok := fn.(*object.Function)
-	if !ok {
+	switch fn := fn.(type) {
+
+	// ユーザー定義関数の場合
+	case *object.Function:
+		extendedEnv := extendFunctionEnv(fn, args)
+		evaluated := Eval(fn.Body, extendedEnv)
+		return unwrapReturnValue(evaluated)
+
+	// 組み込み関数の場合
+	case *object.Builtin:
+		return fn.Fn(args...)
+
+	default:
 		return newError("not a function: %s", fn.Type())
 	}
-
-	// 関数が保持する環境で包まれた環境(拡張環境)を取得
-	extendedEnv := extendFunctionEnv(function, args)
-	// 関数本体を拡張環境で評価
-	evaluated := Eval(function.Body, extendedEnv)
-	return unwrapReturnValue(evaluated)
 }
 
 /*
