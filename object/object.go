@@ -15,6 +15,7 @@ const (
 	RETURN_VALUE_OBJ = "RETURN_VALUE"
 	ERROR_OBJ        = "ERROR"
 	FUNCTION_OBJ     = "FUNCTION"
+	BUILTIN_OBJ      = "BUILTIN"
 )
 
 type ObjectType string
@@ -109,3 +110,18 @@ func (f *Function) Inspect() string {
 
 	return out.String()
 }
+
+/*
+組み込み関数
+*/
+type BuiltinFunction func(args ...Object) Object
+
+/*
+組み込み型
+*/
+type Builtin struct {
+	Fn BuiltinFunction
+}
+
+func (b *Builtin) Type() ObjectType { return BUILTIN_OBJ }
+func (b *Builtin) Inspect() string  { return "builtin function" }
